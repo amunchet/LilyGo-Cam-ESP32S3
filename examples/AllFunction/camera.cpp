@@ -91,6 +91,7 @@ bool setupCamera()
     // drop down frame size for higher initial frame rate
     if (config.pixel_format == PIXFORMAT_JPEG) {
         s->set_framesize(s, FRAMESIZE_QVGA);
+        s->set_framesize(s, FRAMESIZE_QXGA); // Updated
     }
 
 #if defined(LILYGO_ESP32S3_CAM_PIR_VOICE)
@@ -103,6 +104,7 @@ bool setupCamera()
 #endif
 
     frameSize = FRAMESIZE_QVGA;
+    frameSize = FRAMESIZE_QXGA; // Updated
 
     return true;
 }
@@ -124,6 +126,7 @@ void nextFrameSize()
     frameSize %= FRAMESIZE_HD;
     if (frameSize == FRAMESIZE_96X96 ) {
         frameSize = FRAMESIZE_QVGA;
+        frameSize = FRAMESIZE_QXGA; // Updated
     }
     Serial.printf("set frame size = %u\n", frameSize);
     sensor_t *sensor = esp_camera_sensor_get();

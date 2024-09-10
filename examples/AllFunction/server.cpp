@@ -19,7 +19,7 @@ void handle_jpg_stream(void)
 {
     WiFiClient client = server.client();
     String response = "HTTP/1.1 200 OK\r\n";
-    response += "Content-Type: multipart/x-mixed-replace; boundary=frame\r\n\r\n";
+    //response += "Content-Type: multipart/x-mixed-replace; boundary=frame\r\n\r\n";
     server.sendContent(response);
     camera_fb_t *fb;
     while (1) {
@@ -34,8 +34,9 @@ void handle_jpg_stream(void)
         }
         if (!client.connected())
             break;
-        response = "--frame\r\n";
-        response += "Content-Type: image/jpeg\r\n\r\n";
+        //response = "--frame\r\n";
+        //response += "Content-Type: image/jpeg;\r\n\r\n";
+        response = "Content-Type: image/jpeg;\r\n\r\n";
         server.sendContent(response);
 
         client.write(fb->buf, fb->len);
@@ -50,6 +51,7 @@ void handle_jpg_stream(void)
         if (fb) {
             esp_camera_fb_return(fb);
         }
+        break; // Only send one frame
     }
     if (fb) {
         esp_camera_fb_return(fb);
@@ -72,7 +74,7 @@ void handleNotFound()
 
 void setupServer()
 {
-    server.on("/", HTTP_GET, handle_jpg_stream);
+    server.on("/image.jpg", HTTP_GET, handle_jpg_stream);
     server.onNotFound(handleNotFound);
     server.begin();
     startedServer = true;

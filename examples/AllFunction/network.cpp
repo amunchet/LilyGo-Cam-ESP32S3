@@ -8,6 +8,7 @@
  */
 #include <WiFi.h>
 #include <WiFiMulti.h>
+#include "passwords.h" // Where Wifi SSID and password come from
 
 WiFiMulti wifiMulti;
 
@@ -90,10 +91,28 @@ void setupNetwork(bool setup_AP_Mode)
 {
     isAP = setup_AP_Mode;
 
+    Serial.print("Current AP mode:");
+    Serial.println(setup_AP_Mode);
+
     WiFi.onEvent(WiFiEvent);
-
     if (setup_AP_Mode) {
+        WiFi.mode(WIFI_STA);
+        WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
+        Serial.print("Connecting to WiFi");
+
+        // Wait until the ESP32 is connected to the WiFi network
+        while (WiFi.status() != WL_CONNECTED) {
+            delay(1000);
+            Serial.print(".");
+        }
+
+        // Once connected, print the local IP address obtained via DHCP
+        Serial.println("");
+        Serial.print("Connected to WiFi network with IP address: ");
+        Serial.println(WiFi.localIP().toString());
+
+        /*
         WiFi.mode(WIFI_AP);
         hostName += WiFi.macAddress().substring(12);
         WiFi.softAP(hostName.c_str());
@@ -102,13 +121,17 @@ void setupNetwork(bool setup_AP_Mode)
         Serial.println(hostName);
         Serial.print("IP address is :");
         Serial.println(WiFi.softAPIP().toString());
-
+        */
     } else {
-
+        /*
+        Serial.print("HERE before adding AP");
         // If using station mode, please fill in the wifi ssid and password here
-        wifiMulti.addAP("ssid_from_AP_1", "your_password_for_AP_1");
-        wifiMulti.addAP("ssid_from_AP_2", "your_password_for_AP_2");
-        wifiMulti.addAP("ssid_from_AP_3", "your_password_for_AP_3");
+        wifiMulti.addAP("Maokai24", "Ancient-Network-4-iOT!");
+        Serial.print("After adding AP");
+        //wifiMulti.addAP("ssid_from_AP_2", "your_password_for_AP_2");
+        //wifiMulti.addAP("ssid_from_AP_3", "your_password_for_AP_3");
+        */
+        
 
     }
 }
