@@ -8,6 +8,8 @@
  */
 #include <Arduino.h>
 #include <WiFi.h>
+#include <Wire.h>
+#include <U8g2lib.h>
 #include "esp_camera.h"
 #include <secrets.h>
 
@@ -23,12 +25,31 @@
 void        startCameraServer();
 
 XPowersPMU  PMU;
+U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R2, U8X8_PIN_NONE);
 
 static constexpr framesize_t kCameraFrameSize = FRAMESIZE_UXGA;
 static constexpr pixformat_t  kCameraPixelFormat = PIXFORMAT_JPEG;
 static constexpr int          kCameraXclkFreqHz = 20000000;
 static constexpr int          kCameraJpegQuality = 12;
 static constexpr int          kCameraFrameBufferCount = 1;
+
+static void drawNetworkScreen()
+{
+    if (!WiFi.isConnected()) {
+        return;
+    }
+
+    const String ssid = WiFi.SSID();
+    const String ipAddress = WiFi.localIP().toString();
+
+    u8g2.clearBuffer();
+    u8g2.setFont(u8g2_font_8x13_mf);
+    u8g2.setFontPosTop();
+    u8g2.drawStr(0, 0, "AP:");
+    u8g2.drawUTF8(28, 0, ssid.c_str());
+    u8g2.drawUTF8(0, 24, ipAddress.c_str());
+    u8g2.sendBuffer();
+}
 
 
 
@@ -65,6 +86,11 @@ void setup()
     // TS Pin detection must be disable, otherwise it cannot be charged
     PMU.disableTSPinMeasure();
 
+    Wire.begin(I2C_SDA, I2C_SCL);
+    u8g2.begin();
+    u8g2.setFlipMode(0);
+    drawNetworkScreen();
+
 
     /*********************************
      * step 2 : start network in station mode
@@ -90,6 +116,7 @@ void setup()
     Serial.println("WiFi connected");
     Serial.print("IP address: ");
     Serial.println(WiFi.localIP());
+    drawNetworkScreen();
 
 
 
@@ -163,5 +190,6 @@ void setup()
 
 void loop()
 {
+    drawNetworkScreen();
     delay(10000);
 }
