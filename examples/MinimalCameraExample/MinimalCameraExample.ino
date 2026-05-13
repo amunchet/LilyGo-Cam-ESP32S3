@@ -8,7 +8,6 @@
  */
 #include <Arduino.h>
 #include <WiFi.h>
-#include <WiFiMulti.h>
 #include "esp_camera.h"
 #include <secrets.h>
 
@@ -24,10 +23,12 @@
 void        startCameraServer();
 
 XPowersPMU  PMU;
-WiFiMulti   wifiMulti;
-String      hostName = "LilyGo-Cam-";
-String      ipAddress = "";
-bool        use_ap_mode = true;
+
+static constexpr framesize_t kCameraFrameSize = FRAMESIZE_UXGA;
+static constexpr pixformat_t  kCameraPixelFormat = PIXFORMAT_JPEG;
+static constexpr int          kCameraXclkFreqHz = 20000000;
+static constexpr int          kCameraJpegQuality = 12;
+static constexpr int          kCameraFrameBufferCount = 1;
 
 
 
@@ -66,42 +67,36 @@ void setup()
 
 
     /*********************************
-     * step 2 : start network
-     * If using station mode, please change use_ap_mode to false,
-     * and fill in your account password in wifiMulti
+     * step 2 : start network in station mode
     ***********************************/
-    if (use_ap_mode) {
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(WIFI_SSID1, WIFI_SSID_PASSWORD1);
 
-        WiFi.mode(WIFI_AP);
-        hostName += WiFi.macAddress().substring(0, 5);
-        WiFi.softAP(hostName.c_str());
-        ipAddress = WiFi.softAPIP().toString();
-        Serial.print("Started AP mode host name :");
-        Serial.println(hostName);
-        Serial.print("IP address is :");
-        Serial.println(WiFi.softAPIP().toString());
-
-    } else {
-
-        wifiMulti.addAP(WIFI_SSID1, WIFI_SSID_PASSWORD1);
-        wifiMulti.addAP(WIFI_SSID2, WIFI_SSID_PASSWORD1);
-        wifiMulti.addAP(WIFI_SSID3, WIFI_SSID_PASSWORD1);
-        
-        Serial.println("Connecting Wifi...");
-        if (wifiMulti.run() == WL_CONNECTED) {
-            Serial.println("");
-            Serial.println("WiFi connected");
-            Serial.println("IP address: ");
-            Serial.println(WiFi.localIP());
+    Serial.printf("Connecting to %s", WIFI_SSID1);
+    unsigned long connectStart = millis();
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(500);
+        Serial.print(".");
+        if (millis() - connectStart > 20000) {
+            Serial.println();
+            Serial.println("WiFi connection failed");
+            while (1) {
+                delay(1000);
+            }
         }
     }
+
+    Serial.println();
+    Serial.println("WiFi connected");
+    Serial.print("IP address: ");
+    Serial.println(WiFi.localIP());
 
 
 
     /*********************************
      *  step 3 : Initialize camera
     ***********************************/
-    camera_config_t config;
+    camera_config_t config = {};
     config.ledc_channel = LEDC_CHANNEL_0;
     config.ledc_timer = LEDC_TIMER_0;
     config.pin_d0 = Y2_GPIO_NUM;
@@ -120,34 +115,20 @@ void setup()
     config.pin_sscb_scl = SIOC_GPIO_NUM;
     config.pin_pwdn = PWDN_GPIO_NUM;
     config.pin_reset = RESET_GPIO_NUM;
-    config.xclk_freq_hz = 20000000;
-    config.frame_size = FRAMESIZE_UXGA;
-    config.pixel_format = PIXFORMAT_JPEG; // for streaming
-    //config.pixel_format = PIXFORMAT_RGB565; // for face detection/recognition
+    config.xclk_freq_hz = kCameraXclkFreqHz;
+    config.frame_size = kCameraFrameSize;
+    config.pixel_format = kCameraPixelFormat;
     config.grab_mode = CAMERA_GRAB_WHEN_EMPTY;
     config.fb_location = CAMERA_FB_IN_PSRAM;
-    config.jpeg_quality = 12;
-    config.fb_count = 1;
+    config.jpeg_quality = kCameraJpegQuality;
+    config.fb_count = kCameraFrameBufferCount;
 
-    // if PSRAM IC present, init with UXGA resolution and higher JPEG quality
-    //                      for larger pre-allocated frame buffer.
-    if (config.pixel_format == PIXFORMAT_JPEG) {
-        if (psramFound()) {
-            config.jpeg_quality = 10;
-            config.fb_count = 2;
-            config.grab_mode = CAMERA_GRAB_LATEST;
-        } else {
-            // Limit the frame size when PSRAM is not available
-            config.frame_size = FRAMESIZE_SVGA;
-            config.fb_location = CAMERA_FB_IN_DRAM;
-        }
-
-    } else {
-        // Best option for face detection/recognition
-        config.frame_size = FRAMESIZE_240X240;
-#if CONFIG_IDF_TARGET_ESP32S3
+    if (config.pixel_format == PIXFORMAT_JPEG && psramFound()) {
         config.fb_count = 2;
-#endif
+        config.grab_mode = CAMERA_GRAB_LATEST;
+    } else if (!psramFound()) {
+        config.frame_size = FRAMESIZE_SVGA;
+        config.fb_location = CAMERA_FB_IN_DRAM;
     }
 
     // camera init
@@ -166,11 +147,6 @@ void setup()
         s->set_brightness(s, 1); // up the brightness just a bit
         s->set_saturation(s, -2); // lower the saturation
     }
-    // drop down frame size for higher initial frame rate
-    if (config.pixel_format == PIXFORMAT_JPEG) {
-        s->set_framesize(s, FRAMESIZE_QVGA);
-    }
-
 #if defined(LILYGO_ESP32S3_CAM_PIR_VOICE)
     s->set_vflip(s, 1);
     s->set_hmirror(s, 1);
