@@ -2,16 +2,27 @@
 #include "esp_camera.h"
 #include "esp_log.h"
 #include "img_converters.h"
+#include "esp_system.h"
 
 static const char *TAG = "camera_httpd";
+static uint8_t cameraCaptureFailCount = 0;
+static constexpr uint8_t kMaxCaptureFailBeforeRestart = 5;
 
 static esp_err_t image_handler(httpd_req_t *req)
 {
     camera_fb_t *fb = esp_camera_fb_get();
     if (!fb) {
         ESP_LOGE(TAG, "Camera capture failed");
+        cameraCaptureFailCount++;
+        if (cameraCaptureFailCount >= kMaxCaptureFailBeforeRestart) {
+            ESP_LOGE(TAG, "Too many capture failures, restarting");
+            vTaskDelay(pdMS_TO_TICKS(200));
+            esp_restart();
+        }
         return httpd_resp_send_500(req);
     }
+
+    cameraCaptureFailCount = 0;
 
     httpd_resp_set_type(req, "image/jpeg");
     httpd_resp_set_hdr(req, "Content-Disposition", "inline; filename=image.jpg");
@@ -33,6 +44,12 @@ static esp_err_t image_handler(httpd_req_t *req)
     esp_camera_fb_return(fb);
     if (!converted) {
         ESP_LOGE(TAG, "JPEG conversion failed");
+        cameraCaptureFailCount++;
+        if (cameraCaptureFailCount >= kMaxCaptureFailBeforeRestart) {
+            ESP_LOGE(TAG, "Too many conversion failures, restarting");
+            vTaskDelay(pdMS_TO_TICKS(200));
+            esp_restart();
+        }
         return httpd_resp_send_500(req);
     }
 
@@ -56,5 +73,9 @@ void startCameraServer()
     httpd_handle_t camera_httpd = NULL;
     if (httpd_start(&camera_httpd, &config) == ESP_OK) {
         httpd_register_uri_handler(camera_httpd, &image_uri);
+    } else {
+        ESP_LOGE(TAG, "Web server start failed, restarting");
+        vTaskDelay(pdMS_TO_TICKS(200));
+        esp_restart();
     }
 }

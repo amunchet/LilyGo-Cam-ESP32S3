@@ -11,6 +11,8 @@
 #include <Wire.h>
 #include <U8g2lib.h>
 #include "esp_camera.h"
+#include "esp_task_wdt.h"
+#include "esp_system.h"
 #include <secrets.h>
 
 #if (ESP_ARDUINO_VERSION)  > ESP_ARDUINO_VERSION_VAL(3,0,0)
@@ -32,6 +34,40 @@ static constexpr pixformat_t  kCameraPixelFormat = PIXFORMAT_JPEG;
 static constexpr int          kCameraXclkFreqHz = 20000000;
 static constexpr int          kCameraJpegQuality = 12;
 static constexpr int          kCameraFrameBufferCount = 1;
+static constexpr uint32_t     kWatchdogTimeoutSeconds = 20;
+static constexpr uint32_t     kWifiLossRestartTimeoutMs = 30000;
+static constexpr uint32_t     kCameraHealthCheckIntervalMs = 15000;
+static constexpr uint8_t      kMaxCameraHealthFailures = 3;
+
+static bool screenReady = false;
+static uint32_t lastWifiOkMs = 0;
+static uint32_t lastCameraHealthCheckMs = 0;
+static uint8_t consecutiveCameraHealthFailures = 0;
+
+static void restartNow(const char *reason)
+{
+    Serial.printf("Restart requested: %s\n", reason);
+    if (screenReady) {
+        u8g2.clearBuffer();
+        u8g2.setFont(u8g2_font_6x10_tf);
+        u8g2.setFontPosTop();
+        u8g2.drawStr(0, 0, "Restarting...");
+        u8g2.drawUTF8(0, 16, reason);
+        u8g2.sendBuffer();
+    }
+    delay(300);
+    ESP.restart();
+}
+
+static void setupWatchdog()
+{
+    if (esp_task_wdt_init(kWatchdogTimeoutSeconds, true) != ESP_OK) {
+        restartNow("WDT init failed");
+    }
+    if (esp_task_wdt_add(NULL) != ESP_OK) {
+        restartNow("WDT add failed");
+    }
+}
 
 static void drawNetworkScreen()
 {
@@ -57,9 +93,14 @@ void setup()
 {
 
     Serial.begin(115200);
+    setupWatchdog();
 
-    //Start while waiting for Serial monitoring
-    while (!Serial);
+    // Avoid boot deadlock if no USB serial monitor is attached.
+    uint32_t serialWaitStart = millis();
+    while (!Serial && millis() - serialWaitStart < 2000) {
+        delay(10);
+        esp_task_wdt_reset();
+    }
 
     delay(3000);
 
@@ -71,9 +112,7 @@ void setup()
     ***********************************/
     if (!PMU.begin(Wire, AXP2101_SLAVE_ADDRESS, I2C_SDA, I2C_SCL)) {
         Serial.println("Failed to initialize power.....");
-        while (1) {
-            delay(5000);
-        }
+        restartNow("PMU init failed");
     }
     //Set the working voltage of the camera, please do not modify the parameters
     PMU.setALDO1Voltage(1800);  // CAM DVDD  1500~1800
@@ -88,6 +127,7 @@ void setup()
 
     Wire.begin(I2C_SDA, I2C_SCL);
     u8g2.begin();
+    screenReady = true;
     u8g2.setFlipMode(0);
     drawNetworkScreen();
 
@@ -102,13 +142,12 @@ void setup()
     unsigned long connectStart = millis();
     while (WiFi.status() != WL_CONNECTED) {
         delay(500);
+        esp_task_wdt_reset();
         Serial.print(".");
         if (millis() - connectStart > 20000) {
             Serial.println();
             Serial.println("WiFi connection failed");
-            while (1) {
-                delay(1000);
-            }
+            restartNow("WiFi connect timeout");
         }
     }
 
@@ -116,6 +155,7 @@ void setup()
     Serial.println("WiFi connected");
     Serial.print("IP address: ");
     Serial.println(WiFi.localIP());
+    lastWifiOkMs = millis();
     drawNetworkScreen();
 
 
@@ -162,9 +202,7 @@ void setup()
     esp_err_t err = esp_camera_init(&config);
     if (err != ESP_OK) {
         Serial.printf("Camera init failed with error 0x%x Please check if the camera is connected well.", err);
-        while (1) {
-            delay(5000);
-        }
+        restartNow("Camera init failed");
     }
 
     sensor_t *s = esp_camera_sensor_get();
@@ -190,6 +228,28 @@ void setup()
 
 void loop()
 {
+    esp_task_wdt_reset();
+
+    if (WiFi.status() == WL_CONNECTED) {
+        lastWifiOkMs = millis();
+    } else if (millis() - lastWifiOkMs > kWifiLossRestartTimeoutMs) {
+        restartNow("WiFi lost");
+    }
+
+    if (millis() - lastCameraHealthCheckMs > kCameraHealthCheckIntervalMs) {
+        lastCameraHealthCheckMs = millis();
+        camera_fb_t *fb = esp_camera_fb_get();
+        if (!fb) {
+            consecutiveCameraHealthFailures++;
+            if (consecutiveCameraHealthFailures >= kMaxCameraHealthFailures) {
+                restartNow("Camera health failed");
+            }
+        } else {
+            consecutiveCameraHealthFailures = 0;
+            esp_camera_fb_return(fb);
+        }
+    }
+
     drawNetworkScreen();
-    delay(10000);
+    delay(1000);
 }
