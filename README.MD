@@ -1,3 +1,8 @@
+NOTE:
+WE ARE USING `MinimalCameraExample` - we have heavily modified it.
+
+
+
 <h1 align = "center">✨ LilyGO Camera S3 ✨</h1>
 
 ## **English | [中文](README_CN.MD)**
