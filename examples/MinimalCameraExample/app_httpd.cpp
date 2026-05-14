@@ -7,6 +7,7 @@
 static const char *TAG = "camera_httpd";
 static uint8_t cameraCaptureFailCount = 0;
 static constexpr uint8_t kMaxCaptureFailBeforeRestart = 5;
+static constexpr uint8_t kHttpJpegQualityMedium = 60;
 
 static esp_err_t image_handler(httpd_req_t *req)
 {
@@ -40,7 +41,7 @@ static esp_err_t image_handler(httpd_req_t *req)
 
     uint8_t *jpg_buf = NULL;
     size_t jpg_len = 0;
-    bool converted = frame2jpg(fb, 80, &jpg_buf, &jpg_len);
+    bool converted = frame2jpg(fb, kHttpJpegQualityMedium, &jpg_buf, &jpg_len);
     esp_camera_fb_return(fb);
     if (!converted) {
         ESP_LOGE(TAG, "JPEG conversion failed");

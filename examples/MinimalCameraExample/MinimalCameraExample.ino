@@ -29,10 +29,10 @@ void        startCameraServer();
 XPowersPMU  PMU;
 U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R2, U8X8_PIN_NONE);
 
-static constexpr framesize_t kCameraFrameSize = FRAMESIZE_UXGA;
-static constexpr pixformat_t  kCameraPixelFormat = PIXFORMAT_JPEG;
+static constexpr framesize_t kCameraFrameSize = FRAMESIZE_VGA;
+static constexpr pixformat_t  kCameraPixelFormat = PIXFORMAT_GRAYSCALE;
 static constexpr int          kCameraXclkFreqHz = 20000000;
-static constexpr int          kCameraJpegQuality = 12;
+static constexpr int          kCameraJpegQuality = 20;
 static constexpr int          kCameraFrameBufferCount = 1;
 static constexpr uint32_t     kWatchdogTimeoutSeconds = 20;
 static constexpr uint32_t     kWifiLossRestartTimeoutMs = 30000;
@@ -194,7 +194,7 @@ void setup()
         config.fb_count = 2;
         config.grab_mode = CAMERA_GRAB_LATEST;
     } else if (!psramFound()) {
-        config.frame_size = FRAMESIZE_SVGA;
+        config.frame_size = FRAMESIZE_VGA;
         config.fb_location = CAMERA_FB_IN_DRAM;
     }
 
